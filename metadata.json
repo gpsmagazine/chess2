@@ -1,0 +1,6 @@
+{
+  "name": "Modern Art Chess",
+  "description": "A minimal but modern art style chess interface where two players can play on the same device. The board rotates after each move.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}

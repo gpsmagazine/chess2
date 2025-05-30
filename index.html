@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Modern Art Chess</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Add Babel Standalone -->
+    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+    <style>
+      body {
+        font-family: 'Inter', sans-serif; /* A modern sans-serif font */
+        background-color: #f0f2f5; /* Light neutral background */
+      }
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+      
+      .chess-square.highlight-selected {
+        background-color: rgba(52, 211, 153, 0.5) !important; /* Emerald 400 with opacity */
+      }
+      .chess-square.highlight-possible {
+        background-color: rgba(96, 165, 250, 0.4) !important; /* Blue 400 with opacity */
+      }
+      .chess-square.highlight-check {
+        background-color: rgba(239, 68, 68, 0.6) !important; /* Red 500 with opacity */
+      }
+      .chess-piece-icon.fade-out {
+        opacity: 0;
+        transform: scale(0.5); /* Optional: add a shrink effect */
+        transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+      }
+
+      /* Game Over Overlay Styles */
+      .board-overlay-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden; /* Crucial for animations */
+        z-index: 10; /* Above board, below modals */
+      }
+
+      .overlay-half {
+        height: 50%;
+        width: 100%;
+        transition: transform 0.7s ease-out, background-color 0.3s ease-out;
+        background-color: transparent; /* Initial state */
+      }
+
+      /* General mask classes for overlay backgrounds */
+      .red-mask { background-color: rgba(239, 68, 68, 0.6); } /* Red 500 with opacity */
+      .green-mask { background-color: rgba(52, 211, 153, 0.6); } /* Emerald 400 with opacity */
+
+      /* Initial animation states for SINGLE_FLIPPING mode */
+      .overlay-half.animate-slide-up.initial { transform: translateY(100%); }
+      .overlay-half.animate-slide-up.active { transform: translateY(0%); }
+
+      .overlay-half.animate-slide-down.initial { transform: translateY(-100%); }
+      .overlay-half.animate-slide-down.active { transform: translateY(0%); }
+
+      /* Styles for DUAL_STATIC mode full board overlay */
+      .full-board-overlay-pane {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        transition: opacity 0.7s ease-out; /* Match duration of slide for consistency */
+        /* background-color will be applied by red-mask or green-mask */
+      }
+      .full-board-overlay-pane.animate-fade-in {
+        opacity: 1; /* The mask classes provide color and their own opacity, so this just triggers the transition */
+      }
+
+
+      /* Captured Pieces Display Styling */
+      .captured-pieces-display .chess-piece-icon svg {
+        /* Ensure the SVG itself scales if its parent div is sized */
+        width: 100%;
+        height: 100%;
+      }
+
+      /* Piece Vibration Animation */
+      @keyframes vibrate-piece {
+        0%, 100% { transform: translate(0, 0) rotate(0); }
+        25% { transform: translate(-2px, 1px) rotate(-1.5deg); }
+        50% { transform: translate(2px, -1px) rotate(1.5deg); }
+        75% { transform: translate(-1px, 1px) rotate(-0.5deg); }
+      }
+
+      .piece-vibrating {
+        animation: vibrate-piece 0.3s ease-in-out;
+      }
+
+      /* Piece Capture Animation */
+      @keyframes turn-to-dust {
+        0% {
+          opacity: 1;
+          transform: scale(1) translateY(0) rotate(0deg);
+        }
+        50% {
+          opacity: 0.7;
+          transform: scale(0.8) translateY(-10px) rotate(15deg);
+        }
+        100% {
+          opacity: 0;
+          transform: scale(0.3) translateY(-25px) rotate(30deg);
+          visibility: hidden; /* Important to hide after animation */
+        }
+      }
+
+      .piece-capture-animation {
+        animation: turn-to-dust 0.7s ease-out forwards;
+        pointer-events: none; /* Prevent interaction with the animating piece */
+        /* Ensured by JS: position: absolute, top: 0, left: 0, width: 100%, height: 100%, z-index: 10 */
+      }
+      
+      /* King Checkmate Blast Animation - Updated for "disintegration" */
+      @keyframes king-blast {
+        0% { transform: scale(1) rotate(0deg); opacity: 1; filter: blur(0px); }
+        30% { transform: scale(1.1) rotate(-5deg); opacity: 0.8; filter: blur(1px); }
+        60% { transform: scale(0.8) rotate(10deg) translateY(5px); opacity: 0.4; filter: blur(2px); }
+        100% { transform: scale(0.3) rotate(25deg) translateY(15px); opacity: 0; filter: blur(4px); visibility: hidden; }
+      }
+
+      .king-blast-animation {
+        animation: king-blast 0.6s ease-out forwards; /* Duration shortened */
+        z-index: 15; 
+        position: relative; 
+      }
+
+      /* Rubble Pile Appearance Animation */
+      @keyframes rubble-appear {
+        0% { opacity: 0; transform: scale(0.5); }
+        100% { opacity: 1; transform: scale(1); }
+      }
+
+      .rubble-pile {
+        opacity: 0; /* Start hidden */
+        animation: rubble-appear 0.4s ease-out forwards;
+        animation-delay: 0.5s; /* Start after king's disintegration animation is mostly done */
+        /* position: absolute, inset, flex, items-center, justify-center handled by inline styles/classes on the div */
+      }
+      /* Ensure chess squares can contain absolutely positioned children for animations. */
+      /* The 'relative' class will be added via Tailwind in ChessSquare.tsx */
+
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.1.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "immer": "https://esm.sh/immer@^10.1.1"
+  }
+}
+</script>
+</head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <!-- Modify script tag to use Babel -->
+    <script type="text/babel" data-presets="react,typescript" data-type="module" src="./index.tsx"></script>
+  </body>
+</html><link rel="stylesheet" href="index.css">
+<script src="index.tsx" type="module"></script>
